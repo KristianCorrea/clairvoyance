@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Guide Client",
+  title: "Clairvoyance",
   description:
     "Voice-first phone client for ESP32 necklace camera guidance (KnightHacks).",
 };

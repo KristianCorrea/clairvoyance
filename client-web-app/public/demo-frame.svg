@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-label="Demo hallway scene for Clairvoyance stub camera">
+  <rect width="640" height="480" fill="#1a1a1e"/>
+  <!-- floor -->
+  <polygon points="80,480 560,480 400,260 240,260" fill="#2d2d35"/>
+  <!-- walls -->
+  <polygon points="0,0 240,260 240,480 0,480" fill="#25252c"/>
+  <polygon points="640,0 400,260 400,480 640,480" fill="#25252c"/>
+  <!-- ceiling fade -->
+  <polygon points="0,0 640,0 400,260 240,260" fill="#141418"/>
+  <!-- door ahead (center) -->
+  <rect x="285" y="180" width="70" height="120" rx="4" fill="#3d5a4c" stroke="#6ee7b7" stroke-width="3"/>
+  <circle cx="345" cy="240" r="4" fill="#a7f3d0"/>
+  <!-- label -->
+  <text x="320" y="40" text-anchor="middle" fill="#6ee7b7" font-family="system-ui,sans-serif" font-size="20" font-weight="600">Clairvoyance demo frame</text>
+  <text x="320" y="68" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="14">Stub camera  replace with ESP32 snapshot</text>
+</svg>

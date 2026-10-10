@@ -123,8 +123,14 @@ Details: [`client-web-app/README.md`](client-web-app/README.md).
 |-----------|--------|
 | ELEGOO stock AP + browser stream | Working |
 | PlatformIO STA firmware (`esp32-cam`) | Working (pins + stream) |
-| Next.js client shell | Starter UI |
-| Voice + vision API loop | Planned |
+| Next.js client (`client-web-app`) | Stubbed end-to-end loop + **real TTS** |
+| Mic / camera / vision | Stubbed behind env flags — see [`docs/TEAM.md`](docs/TEAM.md) |
+
+### Teammate lanes
+
+Assign work using [`docs/TEAM.md`](docs/TEAM.md):
+
+- **A** UI/orchestration · **B** Camera · **C** STT · **D** Vision API
 
 ## Safety
 
