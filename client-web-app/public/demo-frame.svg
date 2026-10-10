@@ -12,5 +12,5 @@
   <circle cx="345" cy="240" r="4" fill="#a7f3d0"/>
   <!-- label -->
   <text x="320" y="40" text-anchor="middle" fill="#6ee7b7" font-family="system-ui,sans-serif" font-size="20" font-weight="600">Clairvoyance demo frame</text>
-  <text x="320" y="68" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="14">Stub camera  replace with ESP32 snapshot</text>
+  <text x="320" y="68" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="14">Stub camera - replace with ESP32 snapshot</text>
 </svg>
