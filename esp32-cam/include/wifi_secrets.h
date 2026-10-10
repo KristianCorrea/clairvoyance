@@ -12,9 +12,9 @@
 // =============================================================================
 
 #ifndef WIFI_SSID
-#define WIFI_SSID "WeScamOldPeople"
+#define WIFI_SSID "Kristian's Hotspot"
 #endif
 
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "ninjacrispi"
+#define WIFI_PASSWORD "12345678"
 #endif
