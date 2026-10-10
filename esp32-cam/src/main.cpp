@@ -21,9 +21,9 @@
 // ---------------------------------------------------------------------------
 // Board / pin map
 // ---------------------------------------------------------------------------
-// Your board is labeled ESP32-WROVER Camera-v1.5. That matches the pinout
-// Espressif calls CAMERA_MODEL_WROVER_KIT. Wrong model = camera init fails.
-#define CAMERA_MODEL_WROVER_KIT  // Has PSRAM — do not comment this out
+// ELEGOO ESP32-WROVER Camera-V1.5 stock firmware uses M5STACK_WIDE pins
+// (NOT CAMERA_MODEL_WROVER_KIT). Using WROVER_KIT causes probe error 0x105.
+#define CAMERA_MODEL_M5STACK_WIDE
 #include "camera_pins.h"
 #include "wifi_secrets.h"
 
@@ -107,7 +107,7 @@ void setup() {
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x\n", err);
-    Serial.println("Check: USB power, ribbon cable, CAMERA_MODEL_WROVER_KIT");
+    Serial.println("Check: USB power, ribbon, CAMERA_MODEL_M5STACK_WIDE (ELEGOO stock pins)");
     return;  // cannot continue without a working camera
   }
   Serial.println("Camera initialized");

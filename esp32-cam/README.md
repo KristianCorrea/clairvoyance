@@ -133,7 +133,7 @@ while True:
 |---------|-------------|
 | `Permission denied: '/dev/ttyUSB0'` | Add yourself to `dialout`, log out/in; or install PlatformIO udev rules |
 | Endless `WiFi connecting...` / Wi‑Fi FAILED | Fix `wifi_secrets.h`; confirm 2.4 GHz; avoid guest/AP-isolation networks |
-| `Camera init failed` | Confirm `CAMERA_MODEL_WROVER_KIT` in `main.cpp`; reseat camera cable; try another USB cable/port |
+| `Camera init failed` / `0x105` | ELEGOO Camera-V1.5 needs `CAMERA_MODEL_M5STACK_WIDE` (stock firmware), **not** `WROVER_KIT`. See `../vendor/README.md` |
 | Upload fails / brownout | Use a data + power capable cable; powered USB hub; lower `upload_speed` in `platformio.ini` |
 | Page loads, no video | Click **Start Stream**; try `http://IP:81/stream` |
 | Wrong serial port | `pio device list`, then set `upload_port` / `monitor_port` in `platformio.ini` |

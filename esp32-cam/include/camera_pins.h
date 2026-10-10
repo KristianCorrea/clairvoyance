@@ -2,7 +2,8 @@
 // Camera GPIO pin maps for different ESP32 camera boards
 // =============================================================================
 // Only ONE CAMERA_MODEL_* define should be active (set in src/main.cpp).
-// For ESP32-WROVER Camera-v1.5 we use CAMERA_MODEL_WROVER_KIT (first block).
+// ELEGOO ESP32-WROVER Camera-V1.5 stock firmware uses CAMERA_MODEL_M5STACK_WIDE
+// (not WROVER_KIT — wrong model → camera probe 0x105).
 //
 // Numbers are ESP32 GPIO numbers wired to the camera module on that board.
 // -1 means "not connected / not used".
