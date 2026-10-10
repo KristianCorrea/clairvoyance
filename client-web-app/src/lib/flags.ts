@@ -7,17 +7,16 @@
  * NEXT_PUBLIC_* vars are inlined at build time for the browser.
  */
 
-function flag(name: string, defaultOn = true): boolean {
-  const raw = process.env[name];
+function flag(raw: string | undefined, defaultOn = true): boolean {
   if (raw === undefined || raw === "") return defaultOn;
   return raw === "1" || raw.toLowerCase() === "true";
 }
 
 /** Camera snapshot / test — Lane B */
-export const STUB_CAMERA = flag("NEXT_PUBLIC_STUB_CAMERA", true);
+export const STUB_CAMERA = flag(process.env.NEXT_PUBLIC_STUB_CAMERA, true);
 
 /** Microphone / speech-to-text — Lane C (TTS is always real) */
-export const STUB_MIC = flag("NEXT_PUBLIC_STUB_MIC", true);
+export const STUB_MIC = flag(process.env.NEXT_PUBLIC_STUB_MIC, true);
 
 /** Vision / LLM analyze — Lane D */
-export const STUB_ANALYZE = flag("NEXT_PUBLIC_STUB_ANALYZE", true);
+export const STUB_ANALYZE = flag(process.env.NEXT_PUBLIC_STUB_ANALYZE, true);

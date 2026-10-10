@@ -6,7 +6,7 @@
  *   getSnapshot(baseUrl) → Promise<Blob>   // JPEG (or any image blob)
  *
  * Stub (NEXT_PUBLIC_STUB_CAMERA=1):
- *   Uses /demo-frame.svg so the app works without an ESP32.
+ *   Uses /demo-frame.png so the app works without an ESP32.
  *
  * Real implementation ideas:
  *   - GET `${baseUrl}/capture` if firmware exposes stills
@@ -20,7 +20,7 @@
 import { STUB_CAMERA } from "./flags";
 import type { CameraTestResult } from "./types";
 
-const DEMO_FRAME = "/demo-frame.svg";
+const DEMO_FRAME = "/demo-frame.png";
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, "");
@@ -35,7 +35,7 @@ export async function testCamera(baseUrl: string): Promise<CameraTestResult> {
     await sleep(400);
     return {
       ok: true,
-      detail: "Stub camera OK (using demo-frame.svg). Set NEXT_PUBLIC_STUB_CAMERA=0 for hardware.",
+      detail: "Stub camera OK (using demo-frame.png). Set NEXT_PUBLIC_STUB_CAMERA=0 for hardware.",
     };
   }
 
@@ -79,7 +79,7 @@ export async function getSnapshot(baseUrl: string): Promise<Blob> {
     await sleep(300);
     const res = await fetch(DEMO_FRAME, { cache: "no-store" });
     if (!res.ok) {
-      throw new Error("Stub demo-frame.svg missing from /public");
+      throw new Error("Stub demo-frame.png missing from /public");
     }
     return res.blob();
   }

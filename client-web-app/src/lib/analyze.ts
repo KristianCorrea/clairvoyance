@@ -32,7 +32,7 @@ export async function analyzeScene(
   // --- REAL PATH (Lane D): browser → our API route → vision model ---
   const form = new FormData();
   form.append("question", question);
-  form.append("image", image, "frame.jpg");
+  form.append("image", image, image.type === "image/png" ? "frame.png" : "frame.jpg");
 
   const res = await fetch("/api/analyze", {
     method: "POST",
@@ -40,8 +40,8 @@ export async function analyzeScene(
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Analyze failed (${res.status}): ${body}`);
+    const body = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error || `Analyze failed (${res.status}). Please try again.`);
   }
 
   const data = (await res.json()) as { answer?: string };
