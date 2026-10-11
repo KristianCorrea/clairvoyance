@@ -1,72 +1,126 @@
 import { NextResponse } from "next/server";
+import { SpeechClient } from "@google-cloud/speech"; // Google Cloud Speech-to-Text client
 
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
-const SYSTEM_PROMPT = "You are a friendly, concise visual assistant helping a blind or visually impaired person understand their surroundings through a camera. Your goal is to provide clear, natural, and useful spoken descriptions, as if you were a helpful companion.";
+// Define the GeminiResponse type
+interface GeminiResponse {
+  candidates?: {
+    content?: {
+      parts?: { text?: string; thought?: boolean }[];
+    };
+    finishReason?: string;
+  }[];
+}
 
-type GeminiResponse = {
-  candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[];
-};
+const SYSTEM_PROMPT = `You are a navigation assistant for a blind or low-vision person. You receive their spoken question and, when their camera is working, a photo from a camera worn on their chest. Your answer is read aloud to them, so answer only what they asked, as briefly as you can while staying safe.
+
+## What to say
+- Answer the question directly in the first sentence.
+- Include only what they need to act on that answer: the direction and distance to their goal, and obstacles that are actually in their way.
+- Mention something they didn't ask about only if it is an immediate danger close to them, such as a drop-off, stairs, a curb, traffic, a moving vehicle, or something at head height. Say it first, in one sentence.
+- Leave out everything else: background details, scenery, colors, lighting, the walking surface, signs they didn't ask about, and things that aren't in their path.
+- Don't restate the question, add a summary, add a closing line, or offer more help.
+
+## How to say it
+- Keep it to one to three short sentences. Use more only if they asked for a route with several steps.
+- Use plain spoken sentences: no markdown, no lists, no headings, no symbols.
+- Describe positions relative to their body, treating the bottom center of the photo as where they stand, facing forward. Use left, right, straight ahead, or clock positions, with 12 o'clock straight ahead.
+- Give distances in steps, about 2.5 feet each.
+
+## Accuracy
+- Describe only what you can see. If you can't tell, say so in a few words instead of guessing.
+- Don't call a path clear unless you can see all of it.
+- If what they asked about isn't visible, say so and suggest one next step, such as turning slightly so the camera can see more.
+- If the photo is too dark, blurry, or badly aimed to answer, say so in one sentence and tell them how to fix it, such as tilting the camera down.
+- If no image is provided, say you can't answer because there's no camera image and suggest checking the camera connection. Don't guess at their surroundings. You can still answer questions that don't need sight.
+- If the situation looks dangerous, such as crossing heavy traffic, tell them to get sighted help.
+- Describe people only by where they are and what they are doing.`;
 
 export async function POST(req: Request) {
-  let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Send multipart form data with question and image fields." }, { status: 400 });
-  }
-  const question = form.get("question");
-  const image = form.get("image");
-  if (typeof question !== "string" || !question.trim() || question.length > 2000) {
-    return NextResponse.json({ error: "Provide a question between 1 and 2000 characters." }, { status: 400 });
-  }
-  if (!(image instanceof Blob) || !image.size) {
-    return NextResponse.json({ error: "Missing image." }, { status: 400 });
-  }
-  if (!IMAGE_TYPES.has(image.type)) {
-    return NextResponse.json({ error: "Use a JPEG, PNG, WebP, HEIC, or HEIF image." }, { status: 415 });
-  }
-  if (image.size > 10 * 1024 * 1024) {
-    return NextResponse.json({ error: "Image must be 10 MB or smaller." }, { status: 413 });
-  }
-  const key = process.env.GOOGLE_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
-  if (!key) {
-    return NextResponse.json({ error: "Set GOOGLE_API_KEY in .env.local and restart the server." }, { status: 503 });
-  }
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-  try {
+    const formData = await req.formData();
+    // The spoken question is required: either raw audio (transcribed here) or
+    // text the browser already transcribed. The image is optional.
+    const audio = formData.get("audio");
+    const questionField = formData.get("question");
+    const imageField = formData.get("image");
+    const image = imageField instanceof File && imageField.size > 0 ? imageField : null;
+
+    if (!(audio instanceof File && audio.size > 0) && !(typeof questionField === "string" && questionField.trim())) {
+      return NextResponse.json({ error: "A spoken question is required." }, { status: 400 });
+    }
+
+    if (image && image.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: "Image must be 10 MB or smaller." }, { status: 413 });
+    }
+
+    // Validate API key
+    const key = process.env.GOOGLE_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
+    if (!key) {
+      return NextResponse.json({ error: "Set GOOGLE_API_KEY in .env.local and restart the server." }, { status: 503 });
+    }
+
+    let transcription = typeof questionField === "string" ? questionField.trim() : "";
+    if (!transcription && audio instanceof File) {
+      // Transcribe audio to text using Google Cloud Speech-to-Text
+      const speechClient = new SpeechClient();
+      const audioBuffer = Buffer.from(await audio.arrayBuffer());
+      const [transcriptionResponse] = await speechClient.recognize({
+        audio: { content: audioBuffer.toString("base64") },
+        config: {
+          encoding: "LINEAR16", // Adjust based on your audio format
+          sampleRateHertz: 16000, // Adjust based on your audio file
+          languageCode: "en-US", // Adjust based on the language
+        },
+      });
+
+      transcription = transcriptionResponse.results
+        ?.map((result) => result.alternatives?.[0]?.transcript)
+        .join(" ")
+        .trim() ?? "";
+    }
+
+    if (!transcription) {
+      return NextResponse.json({ error: "Could not transcribe the audio. Please try again." }, { status: 400 });
+    }
+
+    // Send the question (and the image, if we have one) to the Gemini model
+    const parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] = [{ text: transcription }];
+    if (image) {
+      parts.push({
+        inlineData: {
+          mimeType: image.type || "image/jpeg",
+          data: Buffer.from(await image.arrayBuffer()).toString("base64"),
+        },
+      });
+    } else {
+      parts.push({ text: "No image was provided — the camera is unavailable." });
+    }
+
+    const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
-        // This model supports disabling thinking for short scene descriptions.
-        ...(model === "gemini-2.5-flash" ? { generationConfig: { thinkingConfig: { thinkingBudget: 0 } } } : {}),
+        ...(model === "gemini-3.5-flash" ? { generationConfig: { thinkingConfig: { thinkingBudget: 0 } } } : {}),
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: "user", parts: [
-          { text: question.trim() },
-          { inlineData: { mimeType: image.type, data: Buffer.from(await image.arrayBuffer()).toString("base64") } },
-        ] }],
+        contents: [{ role: "user", parts }],
       }),
-      signal: AbortSignal.timeout(45_000),
-      cache: "no-store",
     });
+
     if (!response.ok) {
-      const message = response.status === 429
-        ? "Gemini quota or rate limit reached. Check your Google AI Studio quota and try again later."
-        : response.status === 503
-          ? "Gemini is temporarily unavailable. Please try again shortly."
-        : response.status === 401 || response.status === 403
-          ? "Gemini rejected the API key or project permissions. Check GOOGLE_API_KEY in .env.local."
-          : response.status === 404
-            ? "Gemini model unavailable. Check GEMINI_MODEL in .env.local."
-            : "Gemini could not analyze the image. Please try again.";
+      const message = response.status === 503
+        ? "Gemini model unavailable. Check GEMINI_MODEL in .env.local."
+        : "Gemini could not analyze the image. Please try again.";
       return NextResponse.json({ error: message }, { status: response.status === 429 || response.status === 503 ? response.status : 502 });
     }
+
     const data = await response.json() as GeminiResponse;
     const candidate = data.candidates?.[0];
     const answer = candidate?.content?.parts?.filter((part) => !part.thought).map((part) => part.text ?? "").join("").trim();
     if (!answer || (candidate?.finishReason && candidate.finishReason !== "STOP")) {
       return NextResponse.json({ error: "Gemini did not return a complete answer. Try another image or question." }, { status: 502 });
     }
+
     return NextResponse.json({ answer });
   } catch (error) {
     const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");

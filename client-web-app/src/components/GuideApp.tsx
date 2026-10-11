@@ -7,7 +7,7 @@
  * business logic — call into src/lib/* instead so other lanes can ship PRs
  * without fighting over this file.
  *
- * Loop: listenOnce → getSnapshot → analyzeScene → speak
+ * Loop: hold button → startListening → release → getSnapshot → analyzeScene → speak
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,7 +19,8 @@ import { StatusBar } from "@/components/StatusBar";
 import { analyzeScene } from "@/lib/analyze";
 import { getSnapshot, testCamera } from "@/lib/camera";
 import { STUB_ANALYZE, STUB_CAMERA, STUB_MIC } from "@/lib/flags";
-import { listenOnce, speak, stopSpeaking } from "@/lib/speech";
+import { startListening, speak, stopSpeaking } from "@/lib/speech";
+import type { ListenSession } from "@/lib/speech";
 import type { GuidePhase } from "@/lib/types";
 
 const STORAGE_KEY = "clairvoyance.cameraUrl";
@@ -30,13 +31,14 @@ export function GuideApp() {
   const [cameraUrl, setCameraUrl] = useState(DEFAULT_URL);
   const [cameraOk, setCameraOk] = useState<boolean | null>(null);
   const [statusMessage, setStatusMessage] = useState(
-    "Stubs enabled — tap Ask to hear a full demo loop.",
+    "Stubs enabled — hold Ask to hear a full demo loop.",
   );
   const [question, setQuestion] = useState("");
   const [typedQuestion, setTypedQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const listenRef = useRef<ListenSession | null>(null);
 
   const busy = phase !== "idle" && phase !== "error";
 
@@ -102,27 +104,52 @@ export function GuideApp() {
     }
   };
 
+  /** Button pressed: open the mic and record until release. */
+  const handlePressStart = () => {
+    if (busy || listenRef.current) return;
+    stopSpeaking();
+    setAnswer("");
+    setPhase("listening");
+    setStatusMessage(
+      STUB_MIC
+        ? "Stub mic: pretending to listen — release to send."
+        : "Listening — release to send.",
+    );
+    listenRef.current = startListening();
+  };
+
+  /** Button released: stop recording, transcribe, then run the rest of the loop. */
+  const handlePressEnd = async () => {
+    const session = listenRef.current;
+    if (!session) return;
+    listenRef.current = null;
+    setPhase("transcribing");
+    setStatusMessage("Transcribing…");
+    let q: string;
+    try {
+      q = await session.stop();
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    await runGuideLoop(q, true);
+  };
+
+  // Release the mic if the component unmounts mid-recording
+  useEffect(() => () => listenRef.current?.cancel(), []);
+
   /**
-   * Full guide loop. `overrideQuestion` skips STT (typed fallback).
+   * Guide loop for an already-known question (spoken or typed).
+   * `fromVoice` skips the busy guard since the press handlers own the phase.
    */
-  const runGuideLoop = async (overrideQuestion?: string) => {
-    if (busy) return;
+  const runGuideLoop = async (question: string, fromVoice = false) => {
+    if (busy && !fromVoice) return;
     stopSpeaking();
     setAnswer("");
 
     try {
-      let q = overrideQuestion?.trim() ?? "";
-
-      if (!q) {
-        setPhase("listening");
-        setStatusMessage(
-          STUB_MIC
-            ? "Stub mic: pretending to listen…"
-            : "Listening — speak your question.",
-        );
-        q = await listenOnce();
-        setPhase("transcribing");
-      }
+      const q = question.trim();
+      if (!q) throw new Error("I didn't catch that.");
 
       setQuestion(q);
       setStatusMessage(`Question: ${q}`);
@@ -131,9 +158,16 @@ export function GuideApp() {
       setStatusMessage(
         STUB_CAMERA ? "Stub camera: loading demo frame…" : "Capturing frame…",
       );
-      const blob = await getSnapshot(cameraUrl);
-      setPreview(URL.createObjectURL(blob));
-      setCameraOk(true);
+      // Image is optional — if the camera fails, still ask without one.
+      let blob: Blob | null = null;
+      try {
+        blob = await getSnapshot(cameraUrl);
+        setPreview(URL.createObjectURL(blob));
+        setCameraOk(true);
+      } catch {
+        setPreview(null);
+        setCameraOk(false);
+      }
 
       setPhase("analyzing");
       setStatusMessage(
@@ -186,7 +220,12 @@ export function GuideApp() {
 
         <Preview previewUrl={previewUrl} />
 
-        <AskButton busy={busy} onAsk={() => void runGuideLoop()} />
+        <AskButton
+          busy={busy}
+          listening={phase === "listening"}
+          onPressStart={handlePressStart}
+          onPressEnd={() => void handlePressEnd()}
+        />
 
         <form onSubmit={handleTypedSubmit} className="space-y-2">
           <label className="block space-y-2 text-sm text-zinc-300">
