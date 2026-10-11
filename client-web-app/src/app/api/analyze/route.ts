@@ -105,6 +105,7 @@ export async function POST(req: Request) {
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts }],
       }),
+      signal: AbortSignal.timeout(20_000),
     });
 
     if (!response.ok) {
