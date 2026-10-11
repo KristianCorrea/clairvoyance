@@ -7,7 +7,7 @@
  * business logic — call into src/lib/* instead so other lanes can ship PRs
  * without fighting over this file.
  *
- * Loop: hold button → startListening → release → getSnapshot → analyzeScene → speak
+ * Loop: hold button or screen → startListening → release → getSnapshot → analyzeScene → speak
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,13 +25,31 @@ import type { GuidePhase } from "@/lib/types";
 
 const STORAGE_KEY = "clairvoyance.cameraUrl";
 const DEFAULT_URL = "http://192.168.4.1";
+const SCREEN_PRESS_DELAY = 500;
+const SCREEN_PRESS_MOVE_TOLERANCE = 10;
+
+type ScreenPress = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  timer: ReturnType<typeof setTimeout>;
+  activated: boolean;
+};
+
+type ScreenTouch = {
+  identifier: number;
+  startX: number;
+  startY: number;
+  timer: ReturnType<typeof setTimeout>;
+  activated: boolean;
+};
 
 export function GuideApp() {
   const [phase, setPhase] = useState<GuidePhase>("idle");
   const [cameraUrl, setCameraUrl] = useState(DEFAULT_URL);
   const [cameraOk, setCameraOk] = useState<boolean | null>(null);
   const [statusMessage, setStatusMessage] = useState(
-    "Stubs enabled — hold Ask to hear a full demo loop.",
+    "Stubs enabled — hold Ask or anywhere on screen to hear a full demo loop.",
   );
   const [question, setQuestion] = useState("");
   const [typedQuestion, setTypedQuestion] = useState("");
@@ -39,6 +57,8 @@ export function GuideApp() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const listenRef = useRef<ListenSession | null>(null);
+  const screenPressRef = useRef<ScreenPress | null>(null);
+  const screenTouchRef = useRef<ScreenTouch | null>(null);
 
   const busy = phase !== "idle" && phase !== "error";
 
@@ -135,8 +155,133 @@ export function GuideApp() {
     await runGuideLoop(q, true);
   };
 
-  // Release the mic if the component unmounts mid-recording
-  useEffect(() => () => listenRef.current?.cancel(), []);
+  const clearScreenPress = () => {
+    const screenPress = screenPressRef.current;
+    if (!screenPress) return;
+    clearTimeout(screenPress.timer);
+    screenPressRef.current = null;
+  };
+
+  const isInteractiveTarget = (target: EventTarget | null) =>
+    target instanceof Element &&
+    Boolean(target.closest("button, input, textarea, select, a"));
+
+  const handleScreenPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    if (e.pointerType === "mouse" || e.pointerType === "touch" || isInteractiveTarget(e.target)) return;
+
+    clearScreenPress();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+    }
+    const screenPress: ScreenPress = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      activated: false,
+      timer: setTimeout(() => {
+        if (screenPressRef.current !== screenPress) return;
+        screenPress.activated = true;
+        handlePressStart();
+      }, SCREEN_PRESS_DELAY),
+    };
+    screenPressRef.current = screenPress;
+  };
+
+  const handleScreenPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    const screenPress = screenPressRef.current;
+    if (!screenPress || screenPress.pointerId !== e.pointerId) return;
+
+    const movedX = e.clientX - screenPress.startX;
+    const movedY = e.clientY - screenPress.startY;
+    if (
+      !screenPress.activated &&
+      Math.hypot(movedX, movedY) > SCREEN_PRESS_MOVE_TOLERANCE
+    ) {
+      clearScreenPress();
+    }
+  };
+
+  const handleScreenPointerEnd = (e: React.PointerEvent<HTMLElement>) => {
+    const screenPress = screenPressRef.current;
+    if (!screenPress || screenPress.pointerId !== e.pointerId) return;
+    clearScreenPress();
+    if (screenPress.activated) void handlePressEnd();
+  };
+
+  const clearScreenTouch = () => {
+    const screenTouch = screenTouchRef.current;
+    if (!screenTouch) return;
+    clearTimeout(screenTouch.timer);
+    screenTouchRef.current = null;
+  };
+
+  const getScreenTouch = (touches: React.TouchList) => {
+    const screenTouch = screenTouchRef.current;
+    if (!screenTouch) return null;
+    for (let index = 0; index < touches.length; index += 1) {
+      if (touches[index].identifier === screenTouch.identifier) {
+        return touches[index];
+      }
+    }
+    return null;
+  };
+
+  const handleScreenTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+    if (isInteractiveTarget(e.target) || screenTouchRef.current) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const screenTouch: ScreenTouch = {
+      identifier: touch.identifier,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      activated: false,
+      timer: setTimeout(() => {
+        if (screenTouchRef.current !== screenTouch) return;
+        screenTouch.activated = true;
+        handlePressStart();
+      }, SCREEN_PRESS_DELAY),
+    };
+    screenTouchRef.current = screenTouch;
+  };
+
+  const handleScreenTouchMove = (e: React.TouchEvent<HTMLElement>) => {
+    const screenTouch = screenTouchRef.current;
+    const touch = getScreenTouch(e.touches);
+    if (!screenTouch || !touch) return;
+
+    const movedX = touch.clientX - screenTouch.startX;
+    const movedY = touch.clientY - screenTouch.startY;
+    if (!screenTouch.activated) {
+      if (Math.hypot(movedX, movedY) > SCREEN_PRESS_MOVE_TOLERANCE) {
+        clearScreenTouch();
+      }
+      return;
+    }
+
+    e.preventDefault();
+  };
+
+  const handleScreenTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
+    const screenTouch = screenTouchRef.current;
+    const touch = getScreenTouch(e.changedTouches);
+    if (!screenTouch || !touch) return;
+    clearScreenTouch();
+    if (screenTouch.activated) void handlePressEnd();
+  };
+
+  // Release active input if the component unmounts mid-interaction
+  useEffect(
+    () => () => {
+      listenRef.current?.cancel();
+      clearTimeout(screenPressRef.current?.timer);
+      screenPressRef.current = null;
+      clearTimeout(screenTouchRef.current?.timer);
+      screenTouchRef.current = null;
+    },
+    [],
+  );
 
   /**
    * Guide loop for an already-known question (spoken or typed).
@@ -195,7 +340,17 @@ export function GuideApp() {
   };
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-950 text-zinc-50">
+    <div
+      className="flex min-h-full flex-1 touch-pan-y flex-col bg-zinc-950 text-zinc-50"
+      onPointerDown={handleScreenPointerDown}
+      onPointerMove={handleScreenPointerMove}
+      onPointerUp={handleScreenPointerEnd}
+      onPointerCancel={handleScreenPointerEnd}
+      onTouchStart={handleScreenTouchStart}
+      onTouchMove={handleScreenTouchMove}
+      onTouchEnd={handleScreenTouchEnd}
+      onTouchCancel={handleScreenTouchEnd}
+    >
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-5 py-10">
         <header className="space-y-2">
           <p className="text-sm font-medium uppercase tracking-widest text-emerald-400">
@@ -206,6 +361,9 @@ export function GuideApp() {
             Necklace camera + voice answers. Stubs: mic{" "}
             {STUB_MIC ? "ON" : "OFF"}, camera {STUB_CAMERA ? "ON" : "OFF"}, AI{" "}
             {STUB_ANALYZE ? "ON" : "OFF"}.
+          </p>
+          <p className="text-sm font-medium text-emerald-300">
+            Press and hold anywhere on the screen to activate voice.
           </p>
         </header>
 
