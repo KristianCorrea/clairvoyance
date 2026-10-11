@@ -56,14 +56,20 @@ startListening (hold) → stop → getSnapshot → analyzeScene → speak
 
 **Files:** `src/components/*`, `src/components/GuideApp.tsx`, `src/app/page.tsx`
 
-**Job:** Accessibility, layout, status machine, hold-to-ask, typed fallback, wiring.
+**Job:** Accessibility, Connect → Guide flow, hold-to-ask, debug panel, wiring.
+
+**UI flow:**
+
+1. **Connect** (always on load) — camera URL, Test, Activate (Activate needs successful Test unless `STUB_CAMERA=1` force-pass)  
+2. **Guide** — Status → Hold to ask → Answer → Debug (collapsed: stubs, preview, typed ask, Change camera)
 
 **Done when:**
 
-- [ ] Large Ask control works with VoiceOver/TalkBack labels  
-- [ ] Status announces phase changes (`aria-live`)  
-- [ ] Error paths speak a short failure message  
-- [ ] Camera URL persists in `localStorage`
+- [x] Large Ask control works with VoiceOver/TalkBack labels  
+- [x] Status announces phase changes (`aria-live`)  
+- [x] Error paths speak a short failure message  
+- [x] Camera URL persists in `localStorage`  
+- [x] Connect gate always shown first each session  
 
 **Do not:** put fetch/API/model code in components — call `src/lib/*`.
 

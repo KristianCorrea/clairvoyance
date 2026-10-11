@@ -3,18 +3,15 @@
 /**
  * Lane A — UI orchestration only.
  *
- * This component wires the guide loop. It should NOT contain camera/STT/AI
- * business logic — call into src/lib/* instead so other lanes can ship PRs
- * without fighting over this file.
- *
+ * Screens: Connect (always on load) → Guide (status → Ask → Answer → Debug).
  * Loop: hold button → startListening → release → getSnapshot → analyzeScene → speak
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnswerCard } from "@/components/AnswerCard";
 import { AskButton } from "@/components/AskButton";
-import { CameraConfig } from "@/components/CameraConfig";
-import { Preview } from "@/components/Preview";
+import { ConnectScreen } from "@/components/ConnectScreen";
+import { DebugPanel } from "@/components/DebugPanel";
 import { StatusBar } from "@/components/StatusBar";
 import { analyzeScene } from "@/lib/analyze";
 import { getSnapshot, testCamera } from "@/lib/camera";
@@ -26,12 +23,26 @@ import type { GuidePhase } from "@/lib/types";
 const STORAGE_KEY = "clairvoyance.cameraUrl";
 const DEFAULT_URL = "http://192.168.4.1";
 
+type Gate = "connect" | "guide";
+
 export function GuideApp() {
+  const [gate, setGate] = useState<Gate>("connect");
   const [phase, setPhase] = useState<GuidePhase>("idle");
-  const [cameraUrl, setCameraUrl] = useState(DEFAULT_URL);
-  const [cameraOk, setCameraOk] = useState<boolean | null>(null);
+  const [cameraUrl, setCameraUrl] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_URL;
+    try {
+      return localStorage.getItem(STORAGE_KEY) || DEFAULT_URL;
+    } catch {
+      return DEFAULT_URL;
+    }
+  });
+  const [cameraOk, setCameraOk] = useState<boolean | null>(
+    STUB_CAMERA ? true : null,
+  );
   const [statusMessage, setStatusMessage] = useState(
-    "Stubs enabled — hold Ask to hear a full demo loop.",
+    STUB_CAMERA
+      ? "Stub camera enabled — Activate anytime, or set NEXT_PUBLIC_STUB_CAMERA=0 for hardware."
+      : "Enter the camera URL and tap Test connection.",
   );
   const [question, setQuestion] = useState("");
   const [typedQuestion, setTypedQuestion] = useState("");
@@ -39,20 +50,10 @@ export function GuideApp() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const listenRef = useRef<ListenSession | null>(null);
+  const askButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const busy = phase !== "idle" && phase !== "error";
 
-  // Restore saved camera URL
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setCameraUrl(saved);
-    } catch {
-      /* private mode */
-    }
-  }, []);
-
-  // Revoke object URLs on change/unmount
   useEffect(() => {
     return () => {
       if (previewUrlRef.current?.startsWith("blob:")) {
@@ -71,6 +72,10 @@ export function GuideApp() {
 
   const persistUrl = (url: string) => {
     setCameraUrl(url);
+    // URL changed after a test — require a new Test (unless stub force-pass).
+    if (!STUB_CAMERA) {
+      setCameraOk(null);
+    }
     try {
       localStorage.setItem(STORAGE_KEY, url);
     } catch {
@@ -86,6 +91,14 @@ export function GuideApp() {
 
   const handleTest = async () => {
     if (busy) return;
+    if (STUB_CAMERA) {
+      setCameraOk(true);
+      setStatusMessage(
+        "Stub camera OK — Activate guide whenever you’re ready.",
+      );
+      void speak("Stub camera ready.").catch(() => undefined);
+      return;
+    }
     setPhase("capturing");
     setStatusMessage("Testing camera…");
     try {
@@ -104,7 +117,36 @@ export function GuideApp() {
     }
   };
 
-  /** Button pressed: open the mic and record until release. */
+  const handleActivate = () => {
+    if (!STUB_CAMERA && cameraOk !== true) return;
+    setGate("guide");
+    setPhase("idle");
+    setStatusMessage("Guide ready. Hold to ask what’s ahead.");
+    void speak("Guide ready.").catch(() => undefined);
+  };
+
+  // After Activate, move focus to the primary Hold control.
+  useEffect(() => {
+    if (gate !== "guide") return;
+    askButtonRef.current?.focus();
+  }, [gate]);
+
+  const handleChangeCamera = () => {
+    if (busy) return;
+    listenRef.current?.cancel();
+    listenRef.current = null;
+    stopSpeaking();
+    setGate("connect");
+    setPhase("idle");
+    setQuestion("");
+    setAnswer("");
+    setStatusMessage(
+      STUB_CAMERA
+        ? "Stub camera enabled — Activate anytime."
+        : "Camera URL changed or reconnecting — test again before activating.",
+    );
+  };
+
   const handlePressStart = () => {
     if (busy || listenRef.current) return;
     stopSpeaking();
@@ -118,7 +160,6 @@ export function GuideApp() {
     listenRef.current = startListening();
   };
 
-  /** Button released: stop recording, transcribe, then run the rest of the loop. */
   const handlePressEnd = async () => {
     const session = listenRef.current;
     if (!session) return;
@@ -135,20 +176,15 @@ export function GuideApp() {
     await runGuideLoop(q, true);
   };
 
-  // Release the mic if the component unmounts mid-recording
   useEffect(() => () => listenRef.current?.cancel(), []);
 
-  /**
-   * Guide loop for an already-known question (spoken or typed).
-   * `fromVoice` skips the busy guard since the press handlers own the phase.
-   */
-  const runGuideLoop = async (question: string, fromVoice = false) => {
+  const runGuideLoop = async (questionText: string, fromVoice = false) => {
     if (busy && !fromVoice) return;
     stopSpeaking();
     setAnswer("");
 
     try {
-      const q = question.trim();
+      const q = questionText.trim();
       if (!q) throw new Error("I didn't catch that.");
 
       setQuestion(q);
@@ -158,7 +194,6 @@ export function GuideApp() {
       setStatusMessage(
         STUB_CAMERA ? "Stub camera: loading demo frame…" : "Capturing frame…",
       );
-      // Image is optional — if the camera fails, still ask without one.
       let blob: Blob | null = null;
       try {
         blob = await getSnapshot(cameraUrl);
@@ -194,59 +229,40 @@ export function GuideApp() {
     void runGuideLoop(q);
   };
 
+  if (gate === "connect") {
+    return (
+      <ConnectScreen
+        cameraUrl={cameraUrl}
+        busy={busy}
+        stubCamera={STUB_CAMERA}
+        cameraOk={cameraOk}
+        statusMessage={statusMessage}
+        onUrlChange={persistUrl}
+        onTest={() => void handleTest()}
+        onActivate={handleActivate}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col bg-zinc-950 text-zinc-50">
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-5 py-10">
-        <header className="space-y-2">
-          <p className="text-sm font-medium uppercase tracking-widest text-emerald-400">
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-5 py-8">
+        <header className="space-y-1">
+          <p className="text-base font-semibold uppercase tracking-widest text-emerald-400">
             Clairvoyance
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Guide</h1>
-          <p className="text-sm leading-relaxed text-zinc-400">
-            Necklace camera + voice answers. Stubs: mic{" "}
-            {STUB_MIC ? "ON" : "OFF"}, camera {STUB_CAMERA ? "ON" : "OFF"}, AI{" "}
-            {STUB_ANALYZE ? "ON" : "OFF"}.
-          </p>
+          <h1 className="sr-only">Guide</h1>
         </header>
 
         <StatusBar phase={phase} cameraOk={cameraOk} message={statusMessage} />
 
-        <CameraConfig
-          cameraUrl={cameraUrl}
-          busy={busy}
-          onUrlChange={persistUrl}
-          onTest={() => void handleTest()}
-        />
-
-        <Preview previewUrl={previewUrl} />
-
         <AskButton
+          buttonRef={askButtonRef}
           busy={busy}
           listening={phase === "listening"}
           onPressStart={handlePressStart}
           onPressEnd={() => void handlePressEnd()}
         />
-
-        <form onSubmit={handleTypedSubmit} className="space-y-2">
-          <label className="block space-y-2 text-sm text-zinc-300">
-            Or type a question
-            <input
-              type="text"
-              value={typedQuestion}
-              disabled={busy}
-              onChange={(e) => setTypedQuestion(e.target.value)}
-              placeholder="Any obstacles ahead?"
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base outline-none ring-emerald-500 placeholder:text-zinc-600 focus:ring-2 disabled:opacity-50"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={busy || !typedQuestion.trim()}
-            className="w-full rounded-xl border border-zinc-600 px-4 py-3 text-base font-medium hover:bg-zinc-900 disabled:opacity-50"
-          >
-            Send typed question
-          </button>
-        </form>
 
         <AnswerCard
           question={question}
@@ -257,9 +273,17 @@ export function GuideApp() {
           }}
         />
 
-        <p className="pb-6 text-center text-xs text-zinc-600">
-          Teammates: see <code className="text-zinc-400">docs/TEAM.md</code>
-        </p>
+        <DebugPanel
+          stubMic={STUB_MIC}
+          stubCamera={STUB_CAMERA}
+          stubAnalyze={STUB_ANALYZE}
+          previewUrl={previewUrl}
+          typedQuestion={typedQuestion}
+          busy={busy}
+          onTypedChange={setTypedQuestion}
+          onTypedSubmit={handleTypedSubmit}
+          onChangeCamera={handleChangeCamera}
+        />
       </main>
     </div>
   );

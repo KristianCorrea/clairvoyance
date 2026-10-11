@@ -131,10 +131,11 @@ Leave both `npm run dev` and `cloudflared` running.
 1. Stay on the phone’s own hotspot (ESP32 + laptop connected to it).  
 2. Open the **https://…trycloudflare.com** URL in **Chrome** (not `http://10.…:3000`).  
 3. Allow **microphone** when prompted.  
-4. Set **Camera base URL** to `http://<esp-ip>` (no `/capture` suffix).  
-5. Tap **Test connection** → expect OK with KB size / `image/jpeg`.  
-6. Hold **Ask what’s ahead**, speak, release — or use **Or type a question**.  
-7. Confirm Preview shows a real frame and an answer (TTS may soft-fail on some Linux desktops; phone TTS is usually fine).
+4. **Connect** screen: set **Camera base URL** to `http://<esp-ip>` (no `/capture` suffix).  
+5. Tap **Test connection** → expect OK (or Activate immediately if stub camera is on).  
+6. Tap **Activate guide**.  
+7. Hold **Hold to ask**, speak, release — or open **Debug** for typed questions / snapshot preview.  
+8. Confirm status + answer on the main Guide screen (TTS may soft-fail on some Linux desktops; phone TTS is usually fine).
 
 ---
 

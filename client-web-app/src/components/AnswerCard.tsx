@@ -10,9 +10,9 @@ export function AnswerCard({ question, answer, busy, onSpeakAgain }: Props) {
     return (
       <section
         aria-label="Answer"
-        className="rounded-2xl border border-dashed border-zinc-700 p-5 text-sm text-zinc-500"
+        className="rounded-2xl border-2 border-dashed border-zinc-500 p-5 text-lg text-zinc-200"
       >
-        Your question and the spoken answer will show up here.
+        Your answer will appear here after you ask.
       </section>
     );
   }
@@ -20,23 +20,23 @@ export function AnswerCard({ question, answer, busy, onSpeakAgain }: Props) {
   return (
     <section
       aria-label="Answer"
-      className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
+      className="space-y-4 rounded-2xl border-2 border-zinc-500 bg-zinc-900 p-5"
       aria-live="assertive"
     >
       {question ? (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-base font-semibold uppercase tracking-wide text-zinc-300">
             You asked
           </h2>
-          <p className="mt-1 text-base text-zinc-200">{question}</p>
+          <p className="mt-2 text-xl leading-relaxed text-zinc-50">{question}</p>
         </div>
       ) : null}
       {answer ? (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-base font-semibold uppercase tracking-wide text-zinc-300">
             Answer
           </h2>
-          <p className="mt-1 text-lg leading-relaxed text-zinc-50">{answer}</p>
+          <p className="mt-2 text-2xl leading-relaxed text-zinc-50">{answer}</p>
         </div>
       ) : null}
       {answer ? (
@@ -44,7 +44,7 @@ export function AnswerCard({ question, answer, busy, onSpeakAgain }: Props) {
           type="button"
           onClick={onSpeakAgain}
           disabled={busy}
-          className="w-full rounded-xl border border-zinc-600 px-4 py-3 text-base font-medium text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
+          className="min-h-14 w-full rounded-xl border-2 border-zinc-400 px-4 py-4 text-lg font-semibold text-zinc-50 hover:bg-zinc-800 disabled:opacity-50"
         >
           Speak again
         </button>
