@@ -121,6 +121,54 @@ type SpeechRec = {
   onend: (() => void) | null;
 };
 
+function normSpeech(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Android Chrome often returns cumulative finals in one event
+ * ("I'm", "I'm currently", "I'm currently lost"). Concatenating those
+ * stutters. Desktop usually returns true segments — join those.
+ */
+function collapseFinals(finals: string[]): string {
+  if (finals.length === 0) return "";
+  if (finals.length === 1) return normSpeech(finals[0]);
+
+  const normalized = finals.map(normSpeech).filter(Boolean);
+  if (normalized.length === 0) return "";
+
+  let cumulative = true;
+  for (let i = 1; i < normalized.length; i++) {
+    const prev = normalized[i - 1];
+    const cur = normalized[i];
+    // Growing draft, or occasional shorter rewrite of the same utterance
+    if (!cur.startsWith(prev) && !prev.startsWith(cur)) {
+      cumulative = false;
+      break;
+    }
+  }
+
+  if (cumulative) {
+    // Longest draft wins (usually the last row)
+    return normalized.reduce((a, b) => (b.length >= a.length ? b : a));
+  }
+
+  return normSpeech(normalized.join(" "));
+}
+
+/** Append a new phrase without re-gluing overlaps across recognition restarts. */
+function mergeUtterance(prior: string, next: string): string {
+  const a = normSpeech(prior);
+  const b = normSpeech(next);
+  if (!b) return a;
+  if (!a) return b;
+  if (b.startsWith(a) || a.includes(b)) return b.length >= a.length ? b : a;
+  if (a.endsWith(b)) return a;
+  // If b extends a mid-phrase overlap, keep b when it contains a
+  if (b.includes(a)) return b;
+  return normSpeech(`${a} ${b}`);
+}
+
 function startWebSpeech(): ListenSession {
   const w = window as unknown as {
     SpeechRecognition?: new () => SpeechRec;
@@ -149,15 +197,19 @@ function startWebSpeech(): ListenSession {
   let resolveEnded: () => void = () => undefined;
   const ended = new Promise<void>((r) => (resolveEnded = r));
 
+  const sessionPiece = () => normSpeech(finalText || interimText);
+
   rec.onresult = (ev) => {
-    // With continuous=true, `results` holds the whole run — rebuild each time.
-    finalText = "";
-    interimText = "";
+    const finals: string[] = [];
+    let interim = "";
     for (let i = 0; i < ev.results.length; i++) {
       const r = ev.results[i];
-      if (r.isFinal) finalText += r[0].transcript;
-      else interimText += r[0].transcript;
+      const piece = r[0]?.transcript ?? "";
+      if (r.isFinal) finals.push(piece);
+      else interim = piece; // latest interim only (also often cumulative)
     }
+    finalText = collapseFinals(finals);
+    interimText = normSpeech(interim);
   };
   rec.onerror = (ev) => {
     // "no-speech" / "aborted" just mean nothing was captured.
@@ -167,7 +219,7 @@ function startWebSpeech(): ListenSession {
     // Browsers end recognition on their own after silence — restart while
     // the button is still held so we don't drop the rest of the question.
     if (holding && !error) {
-      committed = `${committed} ${finalText}`;
+      committed = mergeUtterance(committed, sessionPiece());
       finalText = "";
       interimText = "";
       try {
@@ -198,9 +250,7 @@ function startWebSpeech(): ListenSession {
       // Safety net: never hang if the browser fails to fire onend.
       await Promise.race([ended, sleep(3000)]);
       if (error) throw new Error(`Mic/STT error: ${error}`);
-      const transcript = `${committed} ${finalText || interimText}`
-        .replace(/\s+/g, " ")
-        .trim();
+      const transcript = mergeUtterance(committed, sessionPiece());
       if (!transcript) throw new Error("I didn't catch that.");
       return transcript;
     },
