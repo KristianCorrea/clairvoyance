@@ -61,7 +61,7 @@ startListening (hold) → stop → getSnapshot → analyzeScene → speak
 **UI flow:**
 
 1. **Connect** (always on load) — camera URL, Test, Activate (Activate needs successful Test unless `STUB_CAMERA=1` force-pass)  
-2. **Guide** — Status → Hold to ask → Answer → Debug (collapsed: stubs, preview, typed ask, Change camera)
+2. **Guide** — Hold-to-ask surface (status + Q&A) → Speak again → Debug (collapsed: stubs, preview, typed ask, Change camera)
 
 **Done when:**
 

@@ -134,8 +134,8 @@ Leave both `npm run dev` and `cloudflared` running.
 4. **Connect** screen: set **Camera base URL** to `http://<esp-ip>` (no `/capture` suffix).  
 5. Tap **Test connection** → expect OK (or Activate immediately if stub camera is on).  
 6. Tap **Activate guide**.  
-7. Hold **Hold to ask**, speak, release — or open **Debug** for typed questions / snapshot preview.  
-8. Confirm status + answer on the main Guide screen (TTS may soft-fail on some Linux desktops; phone TTS is usually fine).
+7. On Guide, **hold anywhere** on the green status/answer surface, speak, release — or open **Debug** for typed questions / snapshot preview.  
+8. Confirm status + answer update on that surface (TTS may soft-fail on some Linux desktops; phone TTS is usually fine).
 
 ---
 

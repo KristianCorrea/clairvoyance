@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnswerCard } from "@/components/AnswerCard";
-import { AskButton } from "@/components/AskButton";
+import { AskSurface } from "@/components/AskSurface";
 import { ConnectScreen } from "@/components/ConnectScreen";
 import { DebugPanel } from "@/components/DebugPanel";
 import { StatusBar } from "@/components/StatusBar";
@@ -50,7 +50,7 @@ export function GuideApp() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const listenRef = useRef<ListenSession | null>(null);
-  const askButtonRef = useRef<HTMLButtonElement | null>(null);
+  const askSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   const busy = phase !== "idle" && phase !== "error";
 
@@ -125,10 +125,10 @@ export function GuideApp() {
     void speak("Guide ready.").catch(() => undefined);
   };
 
-  // After Activate, move focus to the primary Hold control.
+  // After Activate, move focus to the hold-to-ask surface.
   useEffect(() => {
     if (gate !== "guide") return;
-    askButtonRef.current?.focus();
+    askSurfaceRef.current?.focus();
   }, [gate]);
 
   const handleChangeCamera = () => {
@@ -246,32 +246,35 @@ export function GuideApp() {
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-950 text-zinc-50">
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-5 py-8">
-        <header className="space-y-1">
-          <p className="text-base font-semibold uppercase tracking-widest text-emerald-400">
-            Clairvoyance
-          </p>
-          <h1 className="sr-only">Guide</h1>
-        </header>
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 px-5 py-6">
+        <h1 className="sr-only">Clairvoyance Guide</h1>
 
-        <StatusBar phase={phase} cameraOk={cameraOk} message={statusMessage} />
-
-        <AskButton
-          buttonRef={askButtonRef}
+        <AskSurface
+          surfaceRef={askSurfaceRef}
           busy={busy}
           listening={phase === "listening"}
           onPressStart={handlePressStart}
           onPressEnd={() => void handlePressEnd()}
-        />
+        >
+          <StatusBar
+            embedded
+            phase={phase}
+            cameraOk={cameraOk}
+            message={statusMessage}
+          />
+          <AnswerCard embedded question={question} answer={answer} />
+        </AskSurface>
 
-        <AnswerCard
-          question={question}
-          answer={answer}
-          busy={busy}
-          onSpeakAgain={() => {
-            if (answer) void speak(answer);
-          }}
-        />
+        {answer ? (
+          <button
+            type="button"
+            onClick={() => void speak(answer)}
+            disabled={busy}
+            className="min-h-14 w-full rounded-xl border-2 border-zinc-400 px-4 py-4 text-lg font-semibold text-zinc-50 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            Speak again
+          </button>
+        ) : null}
 
         <DebugPanel
           stubMic={STUB_MIC}
