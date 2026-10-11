@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // Phone / LAN demos open http://<laptop-ip>:3000 — Next blocks /_next/hmr
   // from those hosts unless listed (not ESP32 CORS). Private ranges for hotspot.
+  // Cloudflare quick tunnels (cloudflared) for HTTPS mic on phone.
   allowedDevOrigins: [
     "10.*.*.*",
     "192.168.*.*",
@@ -25,6 +26,8 @@ const nextConfig: NextConfig = {
     "172.29.*.*",
     "172.30.*.*",
     "172.31.*.*",
+    "*.trycloudflare.com",
+    "trycloudflare.com",
   ],
   turbopack: {
     rules: {
