@@ -20,7 +20,7 @@
 import { STUB_CAMERA } from "./flags";
 import type { CameraTestResult } from "./types";
 
-const DEMO_FRAME = "/demo-frame.png";
+const DEMO_FRAME = "/images.png";
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, "");
