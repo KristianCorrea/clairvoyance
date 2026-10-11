@@ -2,11 +2,12 @@
  * Lane C — Speech
  *
  * Contracts:
- *   listenOnce() → Promise<string>   // STT (stubbed by default)
+ *   startListening() → { stop(): Promise<string>, cancel() }  // push-to-talk STT
+ *   listenOnce() → Promise<string>   // fixed-window STT (stubbed by default)
  *   speak(text)  → Promise<void>     // TTS — REAL browser speechSynthesis
  *
  * Mic stub (NEXT_PUBLIC_STUB_MIC=1):
- *   Waits ~800ms ("Listening…") then returns a canned question.
+ *   Returns a canned question when listening stops.
  *   Does NOT open the microphone — no permission prompt.
  *
  * Real STT ideas:
@@ -26,19 +27,41 @@ const STUB_QUESTIONS = [
 
 let stubQuestionIndex = 0;
 
+export type ListenSession = {
+  /** Stop listening (button released) and resolve with the transcript. */
+  stop: () => Promise<string>;
+  /** Abort without producing a transcript. */
+  cancel: () => void;
+};
+
 /**
- * Capture one spoken question and return its transcript.
+ * Push-to-talk: start capturing audio now; call `stop()` on release to get
+ * the transcript. The mic stays open only between start and stop.
  */
-export async function listenOnce(): Promise<string> {
+export function startListening(): ListenSession {
   if (STUB_MIC) {
-    await sleep(800);
-    const q = STUB_QUESTIONS[stubQuestionIndex % STUB_QUESTIONS.length];
-    stubQuestionIndex += 1;
-    return q;
+    return {
+      stop: async () => {
+        const q = STUB_QUESTIONS[stubQuestionIndex % STUB_QUESTIONS.length];
+        stubQuestionIndex += 1;
+        return q;
+      },
+      cancel: () => undefined,
+    };
   }
 
   // --- REAL PATH (Lane C) ---
-  return listenWithWebSpeech();
+  return startWebSpeech();
+}
+
+/**
+ * Capture one spoken question and return its transcript (fixed ~5s window).
+ * Prefer startListening() for push-to-talk.
+ */
+export async function listenOnce(): Promise<string> {
+  const session = startListening();
+  await sleep(STUB_MIC ? 800 : 5000);
+  return session.stop();
 }
 
 /**
@@ -81,18 +104,24 @@ export function stopSpeaking() {
   }
 }
 
-async function listenWithWebSpeech(): Promise<string> {
-  type SpeechRec = {
-    lang: string;
-    interimResults: boolean;
-    maxAlternatives: number;
-    start: () => void;
-    stop: () => void;
-    onresult: ((ev: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null;
-    onerror: ((ev: { error: string }) => void) | null;
-    onend: (() => void) | null;
-  };
+type SpeechRec = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult:
+    | ((ev: {
+        results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
+      }) => void)
+    | null;
+  onerror: ((ev: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
 
+function startWebSpeech(): ListenSession {
   const w = window as unknown as {
     SpeechRecognition?: new () => SpeechRec;
     webkitSpeechRecognition?: new () => SpeechRec;
@@ -100,45 +129,91 @@ async function listenWithWebSpeech(): Promise<string> {
 
   const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
   if (!Ctor) {
-    throw new Error(
+    const err = new Error(
       "SpeechRecognition not supported. Use Chrome/Android or keep NEXT_PUBLIC_STUB_MIC=1.",
     );
+    return { stop: () => Promise.reject(err), cancel: () => undefined };
   }
 
-  return new Promise((resolve, reject) => {
-    const rec = new Ctor();
-    rec.lang = "en-US";
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
+  const rec = new Ctor();
+  rec.lang = "en-US";
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
 
-    const timeout = setTimeout(() => {
+  let holding = true; // true until stop()/cancel()
+  let committed = ""; // text from earlier recognition runs (after auto-restart)
+  let finalText = "";
+  let interimText = "";
+  let error: string | null = null;
+  let resolveEnded: () => void = () => undefined;
+  const ended = new Promise<void>((r) => (resolveEnded = r));
+
+  rec.onresult = (ev) => {
+    // With continuous=true, `results` holds the whole run — rebuild each time.
+    finalText = "";
+    interimText = "";
+    for (let i = 0; i < ev.results.length; i++) {
+      const r = ev.results[i];
+      if (r.isFinal) finalText += r[0].transcript;
+      else interimText += r[0].transcript;
+    }
+  };
+  rec.onerror = (ev) => {
+    // "no-speech" / "aborted" just mean nothing was captured.
+    if (ev.error !== "no-speech" && ev.error !== "aborted") error = ev.error;
+  };
+  rec.onend = () => {
+    // Browsers end recognition on their own after silence — restart while
+    // the button is still held so we don't drop the rest of the question.
+    if (holding && !error) {
+      committed = `${committed} ${finalText}`;
+      finalText = "";
+      interimText = "";
       try {
-        rec.stop();
+        rec.start();
+        return;
+      } catch {
+        /* fall through and finish */
+      }
+    }
+    resolveEnded();
+  };
+
+  try {
+    rec.start();
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+    resolveEnded();
+  }
+
+  return {
+    stop: async () => {
+      holding = false;
+      try {
+        rec.stop(); // flushes pending audio into a final result, then onend
+      } catch {
+        resolveEnded();
+      }
+      // Safety net: never hang if the browser fails to fire onend.
+      await Promise.race([ended, sleep(3000)]);
+      if (error) throw new Error(`Mic/STT error: ${error}`);
+      const transcript = `${committed} ${finalText || interimText}`
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!transcript) throw new Error("I didn't catch that.");
+      return transcript;
+    },
+    cancel: () => {
+      holding = false;
+      try {
+        rec.abort();
       } catch {
         /* ignore */
       }
-      reject(new Error("Listening timed out — try again."));
-    }, 8000);
-
-    rec.onresult = (ev) => {
-      clearTimeout(timeout);
-      const transcript = ev.results[0]?.[0]?.transcript?.trim() ?? "";
-      if (!transcript) {
-        reject(new Error("I didn't catch that."));
-        return;
-      }
-      resolve(transcript);
-    };
-    rec.onerror = (ev) => {
-      clearTimeout(timeout);
-      reject(new Error(`Mic/STT error: ${ev.error}`));
-    };
-    rec.onend = () => {
-      /* result or error should have fired */
-    };
-
-    rec.start();
-  });
+      resolveEnded();
+    },
+  };
 }
 
 function sleep(ms: number) {
