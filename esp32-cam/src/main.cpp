@@ -114,8 +114,9 @@ void setup() {
 
   // Optional sensor tweaks (some modules ship upside-down / oversaturated)
   sensor_t *s = esp_camera_sensor_get();
+  s->set_vflip(s, 0);
   if (s->id.PID == OV3660_PID) {
-    s->set_vflip(s, 1);
+    s->set_vflip(s, 0);
     s->set_brightness(s, 1);
     s->set_saturation(s, -2);
   }
