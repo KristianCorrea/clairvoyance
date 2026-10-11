@@ -13,6 +13,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) → **Ask what’s ahead** → you should hear TTS.
 
+**Phone on hotspot:** open `http://<laptop-ip>:3000`. `next.config.ts` allowlists private LAN hosts for Next HMR (`allowedDevOrigins`) — restart `next dev` after changing that. This is separate from ESP32 `/capture` CORS.
+
 ## Stubs vs real
 
 | Flag | Module | Stub behavior |
