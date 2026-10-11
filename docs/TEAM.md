@@ -75,22 +75,23 @@ listenOnce() → getSnapshot() → analyzeScene() → speak()
 
 **Job:**
 
-1. Real `getSnapshot` from ELEGOO / `esp32-cam` firmware  
-2. Reliable `testCamera`  
-3. Solve **CORS** (common): Next.js rewrite/proxy that fetches the ESP32 server-side  
+1. Real `getSnapshot` via STA `GET /capture` (JPEG)  
+2. Reliable `testCamera` (must prove a still, not just HTML on `/`)  
+3. Optional: Next.js proxy only if browser CORS blocks direct fetch  
 
 **Hardware notes:**
 
-- SoftAP: join `ELEGOO-…`, URL `http://192.168.4.1`  
-- STA: board on phone hotspot; URL = DHCP IP from hotspot client list  
+- **Demo default:** phone hotspot + `esp32-cam` STA → URL = DHCP IP, stills at `/capture`  
+- SoftAP: join `ELEGOO-…`, URL `http://192.168.4.1` (may lack `/capture`)  
 - Pins: firmware must use `CAMERA_MODEL_M5STACK_WIDE` (see `esp32-cam/`, `vendor/`)  
 - Weak USB bricks often fail Wi‑Fi; use laptop USB or a solid power bank  
+- Browser may download `/capture` as `.bin` — body is still JPEG  
 
 **Done when:**
 
-- [ ] Test connection reports OK against a live board  
+- [ ] Test connection reports OK against a live board (`/capture` still)  
 - [ ] Ask loop shows a **real** necklace frame in Preview  
-- [ ] Works from a phone browser on the same Wi‑Fi (or documented proxy setup)
+- [ ] Works from a phone browser on the same hotspot (proxy only if needed)
 
 ---
 
