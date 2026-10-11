@@ -11,6 +11,38 @@ interface GeminiResponse {
   }[];
 }
 
+/** Gemini 3.x uses thinkingLevel; 2.5 Flash uses thinkingBudget. */
+function isGemini3Family(model: string): boolean {
+  return /gemini-3/i.test(model);
+}
+
+/**
+ * Lowest practical thinking for spoken guidance latency.
+ * - Gemini 3.7+: thinkingLevel "low" ("minimal" is rejected)
+ * - Older Gemini 3.x: "minimal" when available, else "low"
+ * - Gemini 2.5 Flash family: thinkingBudget 0 (off)
+ */
+function thinkingConfigForModel(model: string): {
+  thinkingBudget: 0;
+} | {
+  thinkingLevel: "minimal" | "low";
+} {
+  if (!isGemini3Family(model)) {
+    return { thinkingBudget: 0 };
+  }
+  // 3.7+ (and 3.10+) reject "minimal"
+  const rejectsMinimal = /gemini-3\.(?:[7-9]|\d{2,})/i.test(model);
+  return { thinkingLevel: rejectsMinimal ? "low" : "minimal" };
+}
+
+function generationConfigForModel(model: string) {
+  return {
+    generationConfig: {
+      thinkingConfig: thinkingConfigForModel(model),
+    },
+  };
+}
+
 const SYSTEM_PROMPT = `You are a navigation assistant for a blind or low-vision person. You receive their spoken question and, when their camera is working, a photo from a camera worn on their chest. Your answer is read aloud to them, so answer only what they asked, as briefly as you can while staying safe.
 
 ## What to say
@@ -101,7 +133,7 @@ export async function POST(req: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
-        ...(model === "gemini-3.5-flash" ? { generationConfig: { thinkingConfig: { thinkingBudget: 0 } } } : {}),
+        ...generationConfigForModel(model),
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts }],
       }),
