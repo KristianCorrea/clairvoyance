@@ -93,16 +93,28 @@ Camera Ready! Open http://192.168.1.42/ in a browser...
 
 Quit the monitor with `Ctrl+C`.
 
-## View the stream
+## View the stream / stills
 
-1. On your PC (same Wi‑Fi), open the printed URL, e.g. `http://192.168.1.42/`
+1. On your PC (same Wi‑Fi / phone hotspot), open the printed URL, e.g. `http://192.168.1.42/`
 2. Click **Start Stream** at the bottom of the page
+
+**Single JPEG still** (what Clairvoyance’s web app uses):
+
+```text
+http://<board-ip>/capture
+```
+
+Browsers may download that as `.bin` (no `.jpg` in the path) — the body is still JPEG.
 
 Direct MJPEG URL (handy for VLC or OpenCV):
 
 ```text
 http://<board-ip>:81/stream
 ```
+
+**Upside-down image:** edit `set_vflip` in `src/main.cpp` (`0` or `1`), then `pio run -t upload`. Necklace mount orientation varies.
+
+Full phone + app demo: [`../docs/SETUP.md`](../docs/SETUP.md).
 
 Example with OpenCV (Python):
 
@@ -136,6 +148,7 @@ while True:
 | `Camera init failed` / `0x105` | ELEGOO Camera-V1.5 needs `CAMERA_MODEL_M5STACK_WIDE` (stock firmware), **not** `WROVER_KIT`. See `../vendor/README.md` |
 | Upload fails / brownout | Use a data + power capable cable; powered USB hub; lower `upload_speed` in `platformio.ini` |
 | Page loads, no video | Click **Start Stream**; try `http://IP:81/stream` |
+| `/capture` missing / HTML only | Confirm STA firmware (`esp32-cam`), not stock SoftAP-only build |
 | Wrong serial port | `pio device list`, then set `upload_port` / `monitor_port` in `platformio.ini` |
 
 ## How the pieces fit together
